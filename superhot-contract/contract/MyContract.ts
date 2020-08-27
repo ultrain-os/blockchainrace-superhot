@@ -1,39 +1,80 @@
 import { Contract } from 'ultrain-ts-lib/src/contract';
-import { RNAME, NAME, Account } from 'ultrain-ts-lib/src/account';
-import { Asset } from 'ultrain-ts-lib/src/asset';
+import { NAME } from 'ultrain-ts-lib/src/account';
 import { Action } from 'ultrain-ts-lib/src/action';
 import { JSON } from 'ultrain-ts-lib/src/json';
 import { intToString } from 'ultrain-ts-lib/src/utils';
-import { Log } from 'ultrain-ts-lib/src/log';
 import { now } from 'ultrain-ts-lib/src/time';
 
-const SupplyTable = 'stat';
-const TicketsTable = 'ticket2';
+const TableOfTickets = 'tickets.2';
 
-class IssueParams implements Serializable {
-  showName: string; //演出名称
-  showPlace: string; //演出地点
-  showTime: string; // 演出时间
-  issueTime: string;// 发行时间
-  issueAmount: u64;// 发行数量
-  highestPrice: u64; // 最高允许售价
-  lowestPrice: u64; // 最低允许售价
-  maxTransferCount: u64; // 最多允许转手次数
-  transRebates: u8[]; // 转手抽成比例
+function arrayToString<T>(value: T[]): string {
+  let s = '[';
+  for (let i = 0; value.length; i++) {
+    s += intToString(value[i]);
+    if (i < value.length - 1) s += ',';
+  }
+  s += ']';
+  return s;
+}
+
+class UidGenerator implements Serializable {
+  index: u64;
+
+  constructor() {
+    this.index = 0;
+  }
+
+  static nextId(): u64 {
+    let tiddb = new DBManager<UidGenerator>(NAME('ticket.id'), NAME('ticket.id'));
+    let tid = new UidGenerator();
+    let existing = tiddb.get(0, tid);
+    tid.index = tid.index + 1;
+
+    if (existing) {
+      tiddb.modify(tid);
+    } else {
+      tiddb.emplace(tid);
+    }
+    return tid.index;
+  }
+ }
+
+class IssueParams implements Serializable, Returnable {
+  showName: string;
+  showPlace: string;
+  showTime: string;
+  issueTime: string;
+  issueAmount: i32;
+  highestPrice: u64;
+  lowestPrice: u64;
+  maxTransferCount: i32;
+  transRebates: u8[];
 
   constructor() {
     this.showName = '';
-    this.showPlace= '';
+    this.showPlace = '';
     this.showTime = '';
     this.issueTime = '';
     this.issueAmount = 0;
     this.highestPrice = 0;
     this.lowestPrice = 0;
     this.maxTransferCount = 0;
-    this.transRebates = [];
+    this.transRebates = new Array<u8>();
   }
 
-  primaryKey(): u64 { return 0; }
+  toString(): string {
+    let json = new JSON();
+    json.item<string>('showName', this.showName);
+    json.item<string>('showPlace', this.showPlace);
+    json.item<string>('showTime', this.showTime);
+    json.item<string>('issueTime', this.issueTime);
+    json.item<i32>('issueAmount', this.issueAmount);
+    json.item<u64>('highestPrice', this.highestPrice);
+    json.item<u64>('lowestPrice', this.lowestPrice);
+    json.item<u64>('maxTransferCount', this.maxTransferCount);
+    json.item<string>('transRebates', arrayToString<u8>(this.transRebates));
+    return json.toString();
+  }
 }
 
 class IssuedIds implements Serializable {
@@ -61,15 +102,13 @@ class IssuedIds implements Serializable {
     let existing = db.get(0, iids);
     return existing ? iids.iids : [];
   }
-
-  primaryKey(): u64 { return 0; }
 }
 
 class SavedIssueInfo implements Serializable, Returnable {
   @primaryid
   id: u64;
   issueParmas: IssueParams;
-  availableNfts: u64[]; // 可以发行的NFT
+  availableNfts: u64[];
 
   constructor() {
     this.id = 0;
@@ -77,23 +116,11 @@ class SavedIssueInfo implements Serializable, Returnable {
     this.availableNfts = [];
   }
 
-  nftIds(): string {
-    let s = '[';
-    for (let i = 0; i < this.availableNfts.length; i++) {
-      s += intToString(this.availableNfts[i]);
-      if (i < this.availableNfts.length - 1) {
-        s += ',';
-      }
-    }
-    s += ']';
-    return s;
-  }
-
   toString(): string {
     let json = new JSON();
     json.item<u64>('issueId', this.id);
     json.item<string>('issueParams', this.issueParmas.toString());
-    json.item<string>('availalbeNfts', this.nftIds());
+    json.item<string>('availalbeNfts', arrayToString<u64>(this.availableNfts));
     return json.toString();
   }
 
@@ -102,15 +129,14 @@ class SavedIssueInfo implements Serializable, Returnable {
   }
 
   private static NftIdPrefix(): u64 {
-
-      let nft: u64 = 0xA000000000000000;
-      let ti: u64 = (<u64>now() << 28);
-      return nft + ti;
+    let nft: u64 = 0xA000000000000000;
+    let ti: u64 = (<u64>now() << 28);
+    return nft + ti;
   }
 
   static add(param: IssueParams): SavedIssueInfo {
     let sii = new SavedIssueInfo();
-    sii.id = U64IdGenerator.nextId();
+    sii.id = UidGenerator.nextId();
     sii.issueParmas = param;
     let idprefix = SavedIssueInfo.NftIdPrefix();
     for (let i = 0; i < param.issueAmount; ++i) {
@@ -138,22 +164,17 @@ class SavedIssueInfo implements Serializable, Returnable {
   }
 }
 
-class TicketTransferRecord  implements Serializable, Returnable {
+class TicketTransferRecord implements Serializable, Returnable {
   ticketPrice: u64; // 票价
-
   buyerFee: u64; // 买方手续费
   buyerPaied: u64; // 买方实付金额
-
   sellerFee: u64; // 卖方手续费
   sellerIncoming: u64; // 卖方实际收入
-
   sellerAccount: string; // 卖方账号
   buyerAccount: string; // 买方账号
-
   time: string; // 交易时间
   status: string; // 交易状态
   txId: string; // 交易id
-
   constructor() {
     this.ticketPrice = 0;
     this.buyerFee = 0;
@@ -181,8 +202,6 @@ class TicketTransferRecord  implements Serializable, Returnable {
     json.item<string>('txId', this.txId);
     return json.toString();
   }
-
-  primaryKey(): u64 { return 0; }
 }
 
 class TicketFirstSell implements Serializable, Returnable {
@@ -218,10 +237,6 @@ class TicketFirstSell implements Serializable, Returnable {
     json.item<string>('txId', this.txId);
     return json.toString();
   }
-
-  primaryKey(): u64 {
-    return 0;
-  }
 }
 
 class Ticket implements Serializable, Returnable {
@@ -236,20 +251,21 @@ class Ticket implements Serializable, Returnable {
   transferRecord: TicketTransferRecord[];
 
   constructor() {
-    this.nft= 0;
-    this.issueId= 0;
+    this.nft = 0;
+    this.issueId = 0;
     this.showName = '';
     this.showPlace = '';
     this.firstSell = new TicketFirstSell();
-    this.transferRecord = [];
+    this.transferRecord = new Array<TicketTransferRecord>();
   }
 
   transferRecordString(): string {
     let s = '[';
     for (let i = 0; i < this.transferRecord.length; ++i) {
       s += this.transferRecord[i].toString();
-      if (i < this.transferRecord.length - 1)
-      s += ','
+      if (i < this.transferRecord.length - 1) {
+        s += ',';
+      }
     }
     s += ']';
 
@@ -267,8 +283,8 @@ class Ticket implements Serializable, Returnable {
     return json.toString();
   }
 
-  private static TicketsDbManager(): DBManager<Ticket> {
-    return new DBManager<Ticket>(NAME(TicketsTable), NAME(TicketsTable));
+  static TicketsDbManager(): DBManager<Ticket> {
+    return new DBManager<Ticket>(NAME(TableOfTickets), NAME(TableOfTickets));
   }
 
   static issue(ticket: Ticket): void {
@@ -290,7 +306,7 @@ class Ticket implements Serializable, Returnable {
     db.modify(ticket);
   }
 
-  static firstSell(nft: u64, sellInfo: TicketFirstSell): void {
+  static firstSellInfo(nft: u64, sellInfo: TicketFirstSell): void {
     let db = Ticket.TicketsDbManager();
     let ticket = new Ticket();
     let existing = db.get(nft, ticket);
@@ -309,32 +325,6 @@ class Ticket implements Serializable, Returnable {
   }
 }
 
-class U64IdGenerator implements Serializable {
-  index: u64;
-  constructor() {
-    this.index = 0;
-  }
-
-  primaryKey(): u64 {
-    return 0;
-  }
-
-  static nextId(): u64 {
-    let tiddb = new DBManager<U64IdGenerator>(NAME('ticket.id'), NAME('ticket.id'));
-    let tid = new U64IdGenerator();
-    let existing = tiddb.get(0, tid);
-    tid.index = tid.index + 1;
-
-    if (existing) {
-      tiddb.modify(tid);
-    } else {
-      tiddb.emplace(tid);
-    }
-    return tid.index;
-  }
-}
-
-@database(Ticket, TicketsTable)
 class MyContract extends Contract {
   @action
   issueTickets(issueInfo: IssueParams): u64 {
@@ -356,13 +346,13 @@ class MyContract extends Contract {
   @action
   firstSellTicket(nft: u64, sellinfo: TicketFirstSell): void {
     Action.requireAuth(this.receiver);
-    Ticket.firstSell(nft, sellinfo);
+    Ticket.firstSellInfo(nft, sellinfo);
   }
 
   @action
-  transferTicket(nft: u64, ticket: TicketTransferRecord): void {
+  transferTicket(nft: u64, transferInfo: TicketTransferRecord): void {
     Action.requireAuth(this.receiver);
-    Ticket.transfer(nft, ticket);
+    Ticket.transfer(nft, transferInfo);
   }
 
   @action("pureview")
