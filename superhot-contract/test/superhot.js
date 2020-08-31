@@ -1,6 +1,6 @@
 const { createU3, U3Utils } = require("u3.js");
 const config = require("../config");
-const account = "chaohuoer";
+const account = "jack";
 const u3 = createU3(config);
 
 async function issueTickets() {
@@ -156,11 +156,11 @@ async function SellTicket2(nft) {
 
 }
 
-// issueTickets().then((value) => console.log('success: ', value)).catch(e => console.log('exception: ', e));
-// issuedIds();
+issueTickets().then((value) => console.log('success: ', value)).catch(e => console.log('exception: ', e));
+issuedIds();
 
 // issueInfo(1);  //  [11958338677228175360,11958338677228175361]
 // SellTicket1('11958338677228175360');
 
 // issueInfo(3);  // [11958338720177848320,11958338720177848321]
-SellTicket2('11958338720177848320');
+// SellTicket2('11958338720177848320');

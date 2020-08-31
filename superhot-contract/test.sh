@@ -22,24 +22,23 @@ ultraincl $clutooldir/../..
 
 clu=$clutooldir/clultrain
 
-CONTRACT=./MyContract
+CONTRACT=MyContract
 
-# if [ -e $CONTRACT ]; then
-#     rm -rf $CONTRACT
-# fi
-# cp -rf ./build $CONTRACT
+if [ -e $CONTRACT ]; then
+    rm -rf $CONTRACT
+fi
+cp -rf ./build $CONTRACT
 
 $clu set contract jack $CONTRACT -p jack
 action="$clu push action jack"
 
 function issue {
-    $action issue $1 -p jack
+    $action issueTickets $1 -p jack
 }
 
-for i in {1..10}; do
-    issue '{"to":"tom","tickets":[{"id":0,"title":"周杰伦演唱会","highestPrice":1000,"rebate":30,"commission":10}]}'
-done
+issue '{"issueInfo":{"showName":"2020西太湖国际音乐节","showPlace":"常州西太湖中国花卉博览景区北门","showTime":"09-19周六9:00","issueTime":"2020年8月25日8:05:00","issueAmount":400,"highestPrice":499,"lowestPrice":189,"maxTransferCount":2,"transRebates":[2,3]}}'
 
+$action issuedIds '[]' -p jack
 
 # 删除合约文件夹
-# rm -rf $CONTRACT
+rm -rf $CONTRACT

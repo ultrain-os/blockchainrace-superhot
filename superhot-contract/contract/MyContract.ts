@@ -2,7 +2,6 @@ import { Contract } from 'ultrain-ts-lib/src/contract';
 import { NAME } from 'ultrain-ts-lib/src/account';
 import { Action } from 'ultrain-ts-lib/src/action';
 import { JSON } from 'ultrain-ts-lib/src/json';
-import { intToString } from 'ultrain-ts-lib/src/utils';
 import { now } from 'ultrain-ts-lib/src/time';
 import { Transaction } from 'ultrain-ts-lib/src/transaction';
 
@@ -10,8 +9,8 @@ const TableOfTickets = 'tickets.2';
 
 function arrayToString<T>(value: T[]): string {
   let s = '[';
-  for (let i = 0; value.length; i++) {
-    s += intToString(value[i]);
+  for (let i = 0; i < value.length; i++) {
+    s += value[i].toString();
     if (i < value.length - 1) s += ',';
   }
   s += ']';
@@ -41,15 +40,15 @@ class UidGenerator implements Serializable {
  }
 
 class IssueParams implements Serializable, Returnable {
-  showName: string;
-  showPlace: string;
-  showTime: string;
-  issueTime: string;
-  issueAmount: i32;
-  highestPrice: u64;
-  lowestPrice: u64;
-  maxTransferCount: i32;
-  transRebates: u8[];
+  showName: string; // 演出名称
+  showPlace: string; // 演出地点
+  showTime: string; // 演出时间
+  issueTime: string; // 发行时间
+  issueAmount: i32; // 发行数量
+  highestPrice: u64; // 最高允许售价
+  lowestPrice: u64; // 最低允许售价
+  maxTransferCount: i32; // 最多允许转手次数
+  transRebates: u8[]; // 转手抽成比例
 
   constructor() {
     this.showName = '';
@@ -82,7 +81,7 @@ class IssuedIds implements Serializable {
   iids: u64[];
 
   constructor() {
-    this.iids = [];
+    this.iids = new Array<u64>();
   }
 
   static add(id: u64): void {
@@ -105,7 +104,8 @@ class IssuedIds implements Serializable {
   }
 }
 
-class SavedIssueInfo implements Serializable, Returnable {
+class
+SavedIssueInfo implements Serializable, Returnable {
   @primaryid
   id: u64;
   issueParmas: IssueParams;
@@ -114,7 +114,7 @@ class SavedIssueInfo implements Serializable, Returnable {
   constructor() {
     this.id = 0;
     this.issueParmas = new IssueParams();
-    this.availableNfts = [];
+    this.availableNfts = new Array<u64>();
   }
 
   toString(): string {
@@ -156,7 +156,7 @@ class SavedIssueInfo implements Serializable, Returnable {
     let sii = new SavedIssueInfo();
     let db = SavedIssueInfo.SIIDB();
     let existing = db.get(id, sii);
-    ultrain_assert(existing, 'issue id ' + intToString(id) + ' is not exist.');
+    ultrain_assert(existing, 'issue id ' + id.toString() + ' is not exist.');
     return sii;
   }
 
@@ -214,7 +214,7 @@ class TicketFirstSell implements Serializable, Returnable {
   buyer: string; // 买方账号
   time: string; // 时间
   status: string; // 状态
-  txId: string;
+  txId: string; // 交易id
 
   constructor() {
     this.price = 0;
@@ -276,7 +276,7 @@ class Ticket implements Serializable, Returnable {
 
   toString(): string {
     let json = new JSON();
-    json.item<u64>('nft', this.nft);
+    json.item<string>('nft', this.nft.toString());
     json.item<u64>('issueId', this.issueId);
     json.item<string>('showName', this.showName);
     json.item<string>('showPlace', this.showPlace);
@@ -298,7 +298,7 @@ class Ticket implements Serializable, Returnable {
     let db = Ticket.TicketsDbManager();
     let ticket = new Ticket();
     let existing = db.get(nft, ticket);
-    ultrain_assert(existing, 'nft ' + intToString(nft) + ' is not exist.');
+    ultrain_assert(existing, 'nft ' + nft.toString() + ' is not exist.');
 
     let sid = ticket.issueId;
     let sii = SavedIssueInfo.query(sid);
@@ -312,22 +312,26 @@ class Ticket implements Serializable, Returnable {
     let db = Ticket.TicketsDbManager();
     let ticket = new Ticket();
     let existing = db.get(nft, ticket);
-    ultrain_assert(existing, 'nft ' + intToString(nft) + ' not exist.');
+    ultrain_assert(existing, 'nft ' + nft.toString() + ' not exist.');
 
     ticket.firstSell = sellInfo;
     db.modify(ticket);
   }
 
-  static query(nft: u64): Ticket {
+  static query(nft: string): Ticket {
     let db = Ticket.TicketsDbManager();
     let t = new Ticket();
-    let existing = db.get(nft, t);
-    ultrain_assert(existing, 'nft ' + intToString(nft) + ' is not exist.');
+    let nftid = U64.parseInt(nft, 10);
+    let existing = db.get(nftid, t);
+    ultrain_assert(existing, 'nft ' + nft + ' is not exist.');
     return t;
   }
 }
 
 class MyContract extends Contract {
+   /**
+    * 发行门票方法, 一次生成所有可用的id
+    */
   @action
   issueTickets(issueInfo: IssueParams): u64 {
     Action.requireAuth(this.receiver);
@@ -345,6 +349,11 @@ class MyContract extends Contract {
     return sii.id;
   }
 
+  /**
+   * 首次卖出门票
+   * @param nft 门票的唯一编号
+   * @param sellinfo 售卖信息
+   */
   @action
   firstSellTicket(nft: string, sellinfo: TicketFirstSell): void {
     Action.requireAuth(this.receiver);
@@ -353,6 +362,11 @@ class MyContract extends Contract {
     Ticket.firstSellInfo(nftid, sellinfo);
   }
 
+  /**
+   * 转手门票操作
+   * @param nft 门票的唯一编号
+   * @param transferInfo 转手信息
+   */
   @action
   transferTicket(nft: string, transferInfo: TicketTransferRecord): void {
     Action.requireAuth(this.receiver);
@@ -361,22 +375,30 @@ class MyContract extends Contract {
     Ticket.transfer(nftid, transferInfo);
   }
 
+  /**
+   * 查询已经发行的门票的发行id
+   */
   @action("pureview")
   issuedIds(): u64[] {
     return SavedIssueInfo.allIds();
   }
 
+  /**
+   * 查询门票的发行信息
+   * @param issueId 门票发行Id
+   */
   @action("pureview")
-  issueInfo(issueId: u64): string[] {
+  issueInfo(issueId: u64): SavedIssueInfo {
     let sii = SavedIssueInfo.query(issueId);
-    let nfts: string[] = [];
-    nfts.push(sii.availableNfts[0].toString());
-    nfts.push(sii.availableNfts[1].toString());
-    return nfts;
+    return sii;
   }
 
+  /**
+   * 查询某一张门票的信息
+   * @param nft 门票的唯一编号
+   */
   @action("pureview")
-  ticketInfo(nft: u64): Ticket {
+  ticketInfo(nft: string): Ticket {
     let t = Ticket.query(nft);
     return t;
   }
