@@ -4,6 +4,7 @@ import { Action } from 'ultrain-ts-lib/src/action';
 import { JSON } from 'ultrain-ts-lib/src/json';
 import { intToString } from 'ultrain-ts-lib/src/utils';
 import { now } from 'ultrain-ts-lib/src/time';
+import { Transaction } from 'ultrain-ts-lib/src/transaction';
 
 const TableOfTickets = 'tickets.2';
 
@@ -175,6 +176,7 @@ class TicketTransferRecord implements Serializable, Returnable {
   time: string; // 交易时间
   status: string; // 交易状态
   txId: string; // 交易id
+
   constructor() {
     this.ticketPrice = 0;
     this.buyerFee = 0;
@@ -344,15 +346,19 @@ class MyContract extends Contract {
   }
 
   @action
-  firstSellTicket(nft: u64, sellinfo: TicketFirstSell): void {
+  firstSellTicket(nft: string, sellinfo: TicketFirstSell): void {
     Action.requireAuth(this.receiver);
-    Ticket.firstSellInfo(nft, sellinfo);
+    sellinfo.txId = Transaction.id;
+    let nftid = U64.parseInt(nft, 10);
+    Ticket.firstSellInfo(nftid, sellinfo);
   }
 
   @action
-  transferTicket(nft: u64, transferInfo: TicketTransferRecord): void {
+  transferTicket(nft: string, transferInfo: TicketTransferRecord): void {
     Action.requireAuth(this.receiver);
-    Ticket.transfer(nft, transferInfo);
+    transferInfo.txId = Transaction.id;
+    let nftid = U64.parseInt(nft, 10);
+    Ticket.transfer(nftid, transferInfo);
   }
 
   @action("pureview")
@@ -361,9 +367,12 @@ class MyContract extends Contract {
   }
 
   @action("pureview")
-  issueInfo(issueId: u64): SavedIssueInfo {
+  issueInfo(issueId: u64): string[] {
     let sii = SavedIssueInfo.query(issueId);
-    return sii;
+    let nfts: string[] = [];
+    nfts.push(sii.availableNfts[0].toString());
+    nfts.push(sii.availableNfts[1].toString());
+    return nfts;
   }
 
   @action("pureview")
